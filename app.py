@@ -1,211 +1,228 @@
-# Import necessary libraries
 import os
-import threading
-import time
-import json
+import sqlite3
+import pickle
 import requests
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List
 from dotenv import load_dotenv
-from typing import List, Dict, Any, Optional
-import html
-import re
 
-# Load environment variables from .env file
-# This allows sensitive data like API keys to be stored securely
+# Load environment variables
 load_dotenv()
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")
+if not OMDB_API_KEY:
+    raise ValueError("OMDB_API_KEY not found in environment variables.")
 
-# --- MovieRecommendationSystem Class ---
-# This class handles fetching movie data from OMDb API, preparing data, and generating recommendations
+# Initialize FastAPI app
+app = FastAPI()
+
+# Enable CORS for React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Adjust for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# SQLite database setup
+DB_PATH = "movies.db"
+SIM_MATRIX_PATH = "similarity_matrix.pkl"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS movies (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            overview TEXT,
+            genres TEXT,
+            cast TEXT,
+            poster_path TEXT,
+            vote_average REAL,
+            release_date TEXT,
+            combined_features TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
 class MovieRecommendationSystem:
     def __init__(self):
-        # Initialize instance variables
-        self.movies_df = None  # DataFrame to store movie data
-        self.similarity_matrix = None  # Matrix for storing cosine similarity scores
-        self.vectorizer = CountVectorizer(stop_words='english')  # For text vectorization
-        self.API_KEY = os.getenv("OMDB_API_KEY")  # Load OMDb API key from environment
-        self.BASE_URL = "http://www.omdbapi.com/"  # OMDb API base URL
-        self.HEADERS = {}  # Optional headers for API requests
-        # Check if API key is present
-        if not self.API_KEY:
-            print("🚨 WARNING: OMDB_API_KEY not found in environment variables.")
+        self.movies_df = None
+        self.similarity_matrix = None
+        self.vectorizer = CountVectorizer(stop_words='english')
+        self.API_KEY = OMDB_API_KEY
+        self.BASE_URL = "http://www.omdbapi.com/"
+        init_db()
+        self.load_data()
 
-    def fetch_movie_by_title(self, title: str) -> Optional[Dict]:
-        """Fetch a single movie's data from OMDb API by title."""
-        if not self.API_KEY:
-            print("🚨 OMDb API key is missing. Cannot fetch movie.")
-            return None
+    def fetch_movie_by_title(self, title):
+        """Fetch a single movie by title from OMDb API."""
         params = {"apikey": self.API_KEY, "t": title, "plot": "full"}
         try:
-            # Make API request with a timeout of 10 seconds
-            response = requests.get(self.BASE_URL, headers=self.HEADERS, params=params, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("Response") == "True":
-                    return data
-            print(f"Error fetching movie '{title}': {response.status_code} or movie not found")
-            return None
-        except requests.exceptions.Timeout:
-            print(f"Timeout fetching movie '{title}'.")
+            response = requests.get(self.BASE_URL, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("Response") == "True":
+                return {
+                    "id": data.get("imdbID", f"unknown_{title}"),
+                    "title": data.get("Title", ""),
+                    "overview": data.get("Plot", ""),
+                    "genres": data.get("Genre", ""),
+                    "cast": data.get("Actors", ""),
+                    "poster_path": data.get("Poster", ""),
+                    "vote_average": float(data.get("imdbRating", 0)) if data.get("imdbRating", "0") not in ["N/A", None, ""] else 0.0,
+                    "release_date": data.get("Year", ""),
+                    "combined_features": f"{data.get('Genre', '')} {data.get('Actors', '')} {data.get('Plot', '')}"
+                }
             return None
         except Exception as e:
             print(f"Error fetching movie '{title}': {e}")
             return None
 
-    def fetch_movies(self, titles: Optional[List[str]] = None, limit: int = 50) -> List[Dict]:
-        """Fetch a list of movies from OMDb API or use a default list if none provided."""
-        if titles is None:
-            # Default list of popular movie titles (limited to avoid excessive API calls)
+    def load_data(self):
+        """Load movie data from SQLite or fetch from OMDb API."""
+        conn = sqlite3.connect(DB_PATH)
+        self.movies_df = pd.read_sql_query("SELECT * FROM movies", conn)
+        conn.close()
+
+        if self.movies_df.empty:
+            print("No data in database. Fetching from OMDb API.")
             titles = [
-                "Inception", "The Dark Knight", "Interstellar", "The Matrix", "Fight Club",
-                "Pulp Fiction", "Forrest Gump", "The Shawshank Redemption", "Gladiator", "Titanic",
-                "Avatar", "The Avengers", "Jurassic Park", "Star Wars", "The Lord of the Rings"
-            ][:limit]
-        movies = []
-        for title in titles[:limit]:
-            movie_data = self.fetch_movie_by_title(title)
-            if movie_data:
-                movies.append(movie_data)
-        return movies
+                "Inception", "The Dark Knight", "Interstellar", "The Matrix", "Pulp Fiction",
+                "Forrest Gump", "The Shawshank Redemption", "Gladiator", "Titanic", "Avatar"
+            ]  # Limited default list for brevity
+            movies_data = [self.fetch_movie_by_title(title) for title in titles if self.fetch_movie_by_title(title)]
+            if movies_data:
+                self.movies_df = pd.DataFrame(movies_data)
+                self.save_data()
+            else:
+                print("Using fallback dataset.")
+                self.movies_df = pd.DataFrame([
+                    {"id": "tt0372784", "title": "Batman Begins", "overview": "Bruce Wayne becomes Batman.", "genres": "Action, Adventure, Crime", "cast": "Christian Bale, Michael Caine", "poster_path": "", "vote_average": 8.2, "release_date": "2005", "combined_features": "Action Adventure Crime Christian Bale Michael Caine Bruce Wayne becomes Batman."}
+                ])
 
-    def prepare_movie_data(self) -> pd.DataFrame:
-        """Prepare movie data by fetching from OMDb or using fallback data."""
-        movies = self.fetch_movies()
-        if not movies:
-            print("🚨 API returned no movies. Using fallback dataset.")
-            # Fallback dataset in case API fails
-            fallback_movies = [
-                {
-                    'id': 'tt0372784', 'title': 'Batman Begins',
-                    'overview': 'A young Bruce Wayne becomes Batman to fight crime in Gotham.',
-                    'genres': 'Action, Adventure, Crime', 'cast': 'Christian Bale, Michael Caine',
-                    'poster_path': 'https://m.media-amazon.com/images/M/MV5BMjE3NDcyNDExNF5BMl5BanBnXkFtZTcwMDYwNDk0OA@@._V1_SX300.jpg',
-                    'vote_average': 8.2, 'release_date': '2005',
-                    'combined_features': 'Action Adventure Crime Christian Bale Michael Caine A young Bruce Wayne becomes Batman to fight crime in Gotham.'
-                },
-                # Add more fallback movies as needed
-            ]
-            self.movies_df = pd.DataFrame(fallback_movies)
-        else:
-            print(f"✅ Fetched {len(movies)} movies from OMDb API.")
-            movie_data = []
-            for movie in movies:
-                # Structure movie data for DataFrame
-                movie_info = {
-                    'id': movie.get('imdbID', movie.get('Title', 'unknown')),
-                    'title': movie.get('Title', ''),
-                    'overview': movie.get('Plot', ''),
-                    'genres': movie.get('Genre', ''),
-                    'cast': movie.get('Actors', ''),
-                    'poster_path': movie.get('Poster', ''),
-                    'vote_average': float(movie.get('imdbRating', '0')) if movie.get('imdbRating') not in ['N/A', None] else 0,
-                    'release_date': movie.get('Year', ''),
-                    'combined_features': f"{movie.get('Genre', '')} {movie.get('Actors', '')} {movie.get('Plot', '')}"
-                }
-                movie_data.append(movie_info)
-            self.movies_df = pd.DataFrame(movie_data)
-        # Build similarity matrix for recommendations
-        self.build_similarity_matrix()
-        return self.movies_df
+        self.load_similarity_matrix()
 
-    def build_similarity_matrix(self) -> None:
-        """Build a cosine similarity matrix based on movie features."""
+    def save_data(self):
+        """Save movie data to SQLite."""
+        conn = sqlite3.connect(DB_PATH)
+        self.movies_df.to_sql("movies", conn, if_exists="replace", index=False)
+        conn.close()
+
+    def build_similarity_matrix(self):
+        """Build and save similarity matrix."""
         if self.movies_df is not None and not self.movies_df.empty:
-            # Use CountVectorizer to convert text features into numerical vectors
-            self.vectorizer = CountVectorizer(stop_words='english', max_features=5000)
-            corpus = self.movies_df['combined_features'].fillna('').tolist()
-            vectorized_features = self.vectorizer.fit_transform(corpus)
-            self.similarity_matrix = cosine_similarity(vectorized_features)
-            print(f"✅ Similarity matrix built with shape: {self.similarity_matrix.shape}")
+            corpus = self.movies_df["combined_features"].fillna("").astype(str).tolist()
+            if not any(corpus):
+                print("Corpus is empty.")
+                self.similarity_matrix = None
+                return
+            max_features = min(5000, len(set(" ".join(corpus).split())) or 1)
+            self.vectorizer = CountVectorizer(stop_words="english", max_features=max_features)
+            try:
+                vectorized_features = self.vectorizer.fit_transform(corpus)
+                self.similarity_matrix = cosine_similarity(vectorized_features)
+                with open(SIM_MATRIX_PATH, "wb") as f:
+                    pickle.dump(self.similarity_matrix, f)
+                print(f"Similarity matrix built and saved: {self.similarity_matrix.shape}")
+            except Exception as e:
+                print(f"Error building similarity matrix: {e}")
+                self.similarity_matrix = None
         else:
-            print("🚨 Cannot build similarity matrix: movies_df is empty.")
+            print("No movie data to build similarity matrix.")
+            self.similarity_matrix = None
 
-    def get_recommendations(self, selected_movie_ids: List[str], num_recommendations: int = 5) -> List[Dict]:
-        """Generate movie recommendations based on selected movie IDs."""
-        if self.similarity_matrix is None or self.movies_df.empty:
-            print("🚨 Similarity matrix or movies_df is empty.")
+    def load_similarity_matrix(self):
+        """Load similarity matrix from disk or rebuild."""
+        try:
+            with open(SIM_MATRIX_PATH, "rb") as f:
+                self.similarity_matrix = pickle.load(f)
+                if self.similarity_matrix.shape[0] != len(self.movies_df):
+                    print("Similarity matrix size mismatch. Rebuilding.")
+                    self.build_similarity_matrix()
+                else:
+                    print("Similarity matrix loaded from disk.")
+        except FileNotFoundError:
+            print("No similarity matrix found. Building new one.")
+            self.build_similarity_matrix()
+
+    def get_recommendations(self, selected_movie_ids: List[str], num_recommendations: int = 5) -> List[dict]:
+        """Get movie recommendations based on selected movie IDs."""
+        if self.similarity_matrix is None or self.movies_df is None or self.movies_df.empty:
             return []
-        # Find indices of selected movies
-        selected_indices = self.movies_df[self.movies_df['id'].isin(selected_movie_ids)].index.tolist()
-        if not selected_indices:
-            print("🚨 No selected movies found in DataFrame.")
+        valid_indices = self.movies_df[self.movies_df["id"].isin(selected_movie_ids)].index.tolist()
+        if not valid_indices:
             return []
-        # Calculate average similarity scores
-        avg_similarity_scores = np.mean(self.similarity_matrix[selected_indices], axis=0)
-        # Sort movies by similarity
-        movie_indices = np.argsort(avg_similarity_scores)[::-1]
+        avg_similarity_scores = np.mean(self.similarity_matrix[valid_indices, :], axis=0)
+        sorted_indices = np.argsort(avg_similarity_scores)[::-1]
         recommendations = []
-        for idx in movie_indices:
+        seen = set(selected_movie_ids)
+        for idx in sorted_indices:
+            if idx >= len(self.movies_df):
+                continue
             movie = self.movies_df.iloc[idx]
-            if movie['id'] not in selected_movie_ids:  # Exclude selected movies
+            if movie["id"] not in seen:
                 recommendations.append(movie.to_dict())
+                seen.add(movie["id"])
                 if len(recommendations) >= num_recommendations:
                     break
         return recommendations
 
-# Initialize the recommender
-recommender = MovieRecommendationSystem()
+    def add_movie(self, title: str):
+        """Add a new movie to the dataset and update similarity matrix."""
+        movie_data = self.fetch_movie_by_title(title)
+        if movie_data and movie_data["id"] not in self.movies_df["id"].values:
+            self.movies_df = pd.concat([self.movies_df, pd.DataFrame([movie_data])], ignore_index=True)
+            self.save_data()
+            self.build_similarity_matrix()
+            return movie_data
+        return None
 
-# --- Flask Application ---
-# Create a Flask app for the RESTful API
-app = Flask(__name__)
-CORS(app)  # Enable CORS to allow frontend requests from different origins
+# Initialize recommender
+rec_sys = MovieRecommendationSystem()
 
-@app.route('/')
-def index():
-    """Root endpoint for health check and API documentation."""
-    return jsonify({
-        "message": "CinemaAI API is running!",
-        "status": "success",
-        "endpoints": {
-            "/api/movies": "GET - Fetch all movies",
-            "/api/recommend": "POST - Get movie recommendations",
-            "/api/health": "GET - Check API health"
-        }
-    })
+# Pydantic models
+class MovieRequest(BaseModel):
+    movie_ids: List[str]
+    num_recommendations: int = 5
 
-@app.route('/api/movies', methods=['GET'])
-def get_movies():
-    """Fetch all movies from the recommender system."""
-    try:
-        if recommender.movies_df is None or recommender.movies_df.empty:
-            print("Preparing movie data...")
-            recommender.prepare_movie_data()
-        movies = recommender.movies_df.to_dict('records')
-        return jsonify(movies)
-    except Exception as e:
-        print(f"Error in get_movies: {e}")
-        return jsonify({'error': 'Failed to fetch movies'}), 500
+class Movie(BaseModel):
+    id: str
+    title: str
+    overview: str
+    genres: str
+    cast: str
+    poster_path: str
+    vote_average: float
+    release_date: str
 
-@app.route('/api/recommend', methods=['POST'])
-def recommend_movies():
-    """Generate recommendations based on selected movie IDs."""
-    try:
-        data = request.json
-        selected_movie_ids = data.get('selected_movies', [])
-        if len(selected_movie_ids) < 5:
-            return jsonify({'error': 'Please select at least 5 movies'}), 400
-        recommendations = recommender.get_recommendations(selected_movie_ids)
-        return jsonify(recommendations)
-    except Exception as e:
-        print(f"Error in recommend_movies: {e}")
-        return jsonify({'error': 'Failed to get recommendations'}), 500
+@app.get("/movies", response_model=List[Movie])
+async def get_movies():
+    """Return all available movies."""
+    if rec_sys.movies_df is None or rec_sys.movies_df.empty:
+        raise HTTPException(status_code=500, detail="Movie data not available")
+    return rec_sys.movies_df.to_dict(orient="records")
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Check the health of the API and recommender system."""
-    return jsonify({
-        "status": "healthy",
-        "movies_loaded": len(recommender.movies_df) if recommender.movies_df is not None else 0,
-        "similarity_matrix_built": recommender.similarity_matrix is not None
-    })
+@app.post("/recommend", response_model=List[Movie])
+async def get_recommendations(request: MovieRequest):
+    """Get movie recommendations."""
+    recommendations = rec_sys.get_recommendations(request.movie_ids, request.num_recommendations)
+    if not recommendations:
+        raise HTTPException(status_code=404, detail="No recommendations found")
+    return recommendations
 
-# --- Main Execution ---
-if __name__ == "__main__":
-    # Start Flask server
-    print("🚀 Starting Flask backend server...")
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=False)
+@app.get("/search/{title}", response_model=List[Movie])
+async def search_movie(title: str, background_tasks: BackgroundTasks):
+    """Search for a movie by title."""
+    movie_data = rec_sys.add_movie(title)
+    if not movie_data:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    return [movie_data]
