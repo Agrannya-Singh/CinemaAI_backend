@@ -231,7 +231,9 @@ class Movie(BaseModel):
 async def get_movies():
     if rec_sys.movies_df.empty:
         raise HTTPException(status_code=500, detail="No movie data available")
-    return rec_sys.movies_df.to_dict(orient="records")
+    # Explicitly ensure all records are returned
+    movies = rec_sys.movies_df.to_dict(orient="records")
+    return movies
 
 @app.post("/recommend", response_model=List[Movie])
 async def recommend_movies(request: MovieRequest):
