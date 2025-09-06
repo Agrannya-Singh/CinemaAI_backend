@@ -2,6 +2,7 @@ import os
 import sqlite3
 import requests
 import pandas as pd
+import numpy as np
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,7 +29,7 @@ if not OMDB_API_KEY:
     raise ValueError("OMDB_API_KEY not found in environment variables.")
 
 # Constants
-DB_PATH = "/var/data/movies.db"
+DB_PATH = "/tmp/movies.db"  # Writable ephemeral path on Render free tier
 OMDB_API_URL = "http://www.omdbapi.com/"
 TFIDF_MAX_FEATURES = 5000
 API_TIMEOUT = 10
@@ -61,7 +62,10 @@ class MovieRecommender:
             sqlite3.Error: If a database error occurs.
         """
         try:
-            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            # Create parent dir if needed (not necessary for /tmp, but safe)
+            dirname = os.path.dirname(self.db_path)
+            if dirname:
+                os.makedirs(dirname, exist_ok=True)
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS movies (
@@ -93,6 +97,9 @@ class MovieRecommender:
         except sqlite3.Error as e:
             logger.error(f"Database error: {e}")
             raise
+        except PermissionError as e:
+            logger.error(f"Permission error accessing {self.db_path}: {e}")
+            raise HTTPException(status_code=500, detail=f"Permission denied for database path: {self.db_path}. Ensure the path is writable.")
 
     def build_models(self) -> None:
         """
