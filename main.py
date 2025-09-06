@@ -29,7 +29,7 @@ if not OMDB_API_KEY:
 
 # IMPORTANT: This path MUST match the Mount Path of your attached Render Disk.
 # Free tier filesystems are temporary. You need a paid Render Disk for data to persist.
-DB_PATH = "/data/render/disk/movies.db"
+DB_PATH = "/tmp/movies.db"
 OMDB_API_URL = "http://www.omdbapi.com/"
 
 CONFIG = {
