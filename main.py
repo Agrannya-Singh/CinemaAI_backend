@@ -22,14 +22,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 load_dotenv()
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
 if not OMDB_API_KEY:
     raise ValueError("OMDB_API_KEY not found in environment variables.")
 
-# IMPORTANT: This path MUST match the Mount Path of your attached Render Disk.
-# Free tier filesystems are temporary. You need a paid Render Disk for data to persist.
-DB_PATH = "/tmp/movies.db"
+DB_PATH = "/tmp/movies.db"  # Using /tmp as requested for temporary storage
 OMDB_API_URL = "http://www.omdbapi.com/"
 
 CONFIG = {
@@ -37,8 +34,21 @@ CONFIG = {
     "API_TIMEOUT_SECONDS": 10,
     "CONTENT_WEIGHT": 0.5,
     "COLLAB_WEIGHT": 0.5,
-    "SEED_MOVIE_COUNT": 500,
 }
+
+# Predefined list of movies for seeding the database
+# This list can be expanded to 200-500 titles for a richer dataset.
+PREDEFINED_MOVIE_TITLES = [
+    "Inception", "The Shawshank Redemption", "The Dark Knight", "Pulp Fiction",
+    "Forrest Gump", "The Matrix", "The Lord of the Rings: The Fellowship of the Ring",
+    "Fight Club", "Goodfellas", "Star Wars: Episode V - The Empire Strikes Back",
+    "Interstellar", "Parasite", "The Green Mile", "Gladiator", "Saving Private Ryan",
+    "The Departed", "Whiplash", "The Prestige", "The Lion King", "Alien", "Se7en",
+    "Spirited Away", "Back to the Future", "Django Unchained", "The Shining",
+    "WALL·E", "Avengers: Endgame", "Joker", "Oldboy", "Coco", "Braveheart",
+    "Toy Story", "Amadeus", "Inglourious Basterds", "Good Will Hunting", "Reservoir Dogs",
+    "Blade Runner", "No Country for Old Men", "The Silence of the Lambs", "Dune"
+]
 
 
 # --- Recommendation Engine Class ---
@@ -47,7 +57,6 @@ class MovieRecommender:
     """Manages movie data, recommendation models, and recommendation logic."""
 
     def __init__(self, db_path: str = DB_PATH):
-        """Initializes the recommender, loads data, and builds models."""
         self.db_path = db_path
         self.movies_df = pd.DataFrame()
         self.ratings_df = pd.DataFrame()
@@ -61,29 +70,12 @@ class MovieRecommender:
         self.build_models()
 
     def _seed_initial_movies(self) -> None:
-        """Fetches popular movies to seed the database if it's empty."""
-        logging.info("Database is empty. Seeding with popular movies...")
-        if not TMDB_API_KEY:
-            logging.warning("TMDB_API_KEY not found. Cannot seed database.")
-            return
-
-        popular_movies_titles = set()
-        num_pages = (CONFIG["SEED_MOVIE_COUNT"] // 20) + 1  # TMDB has 20 movies per page
-        try:
-            for page in range(1, num_pages + 1):
-                url = f"https://api.themoviedb.org/3/movie/popular?api_key={TMDB_API_KEY}&page={page}"
-                response = requests.get(url, timeout=CONFIG["API_TIMEOUT_SECONDS"])
-                response.raise_for_status()
-                for movie in response.json().get("results", []):
-                    popular_movies_titles.add(movie["title"])
-        except requests.RequestException as e:
-            logging.error(f"Failed to fetch popular movies from TMDB: {e}")
-            return
-
-        logging.info(f"Fetched {len(popular_movies_titles)} unique titles. Fetching details...")
+        """Seeds the database from a predefined list of movie titles."""
+        logging.info("Database is empty. Seeding with predefined movie list...")
+        
         new_movies = [
             self._process_api_data(raw_data)
-            for title in popular_movies_titles
+            for title in PREDEFINED_MOVIE_TITLES
             if (raw_data := self._fetch_movie_from_api(title))
         ]
 
@@ -124,6 +116,11 @@ class MovieRecommender:
         except sqlite3.Error as e:
             logging.error(f"Database error during data load: {e}")
             raise
+
+    # ... The rest of the class methods remain unchanged ...
+    # (build_models, _build_content_model, _build_collaborative_model, 
+    # _fetch_movie_from_api, _process_api_data, _update_content_matrix_for_new_movie,
+    # find_or_add_movie, get_recommendations)
 
     def build_models(self) -> None:
         """Builds (or rebuilds) both recommendation models."""
@@ -267,12 +264,9 @@ class MovieRecommender:
 
         return self.movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
 
-
 # --- FastAPI Application ---
 
 app = FastAPI(title="CinemaAI Recommendation API", description="A hybrid movie recommendation engine.")
-
-# WARNING: This is insecure for production. Restrict origins to your frontend's domain.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
