@@ -1,5 +1,6 @@
-# Pin NumPy FIRST to resolve binary conflicts with other data science libraries
+# Build dependencies for scikit-surprise
 numpy==1.26.4
+cython==3.0.10
 
 # Core application
 fastapi==0.111.0
