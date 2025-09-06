@@ -27,8 +27,9 @@ TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 if not OMDB_API_KEY:
     raise ValueError("OMDB_API_KEY not found in environment variables.")
 
-# Use a persistent disk path for Render deployments
-DB_PATH = "/var/data/movies.db"
+# IMPORTANT: This path MUST match the Mount Path of your attached Render Disk.
+# Free tier filesystems are temporary. You need a paid Render Disk for data to persist.
+DB_PATH = "/data/render/disk/movies.db"
 OMDB_API_URL = "http://www.omdbapi.com/"
 
 CONFIG = {
@@ -36,6 +37,7 @@ CONFIG = {
     "API_TIMEOUT_SECONDS": 10,
     "CONTENT_WEIGHT": 0.5,
     "COLLAB_WEIGHT": 0.5,
+    "SEED_MOVIE_COUNT": 500,
 }
 
 
@@ -66,8 +68,9 @@ class MovieRecommender:
             return
 
         popular_movies_titles = set()
+        num_pages = (CONFIG["SEED_MOVIE_COUNT"] // 20) + 1  # TMDB has 20 movies per page
         try:
-            for page in range(1, 11):  # Fetch 10 pages (~200 movies)
+            for page in range(1, num_pages + 1):
                 url = f"https://api.themoviedb.org/3/movie/popular?api_key={TMDB_API_KEY}&page={page}"
                 response = requests.get(url, timeout=CONFIG["API_TIMEOUT_SECONDS"])
                 response.raise_for_status()
@@ -78,7 +81,11 @@ class MovieRecommender:
             return
 
         logging.info(f"Fetched {len(popular_movies_titles)} unique titles. Fetching details...")
-        new_movies = [self._process_api_data(raw_data) for title in popular_movies_titles if (raw_data := self._fetch_movie_from_api(title))]
+        new_movies = [
+            self._process_api_data(raw_data)
+            for title in popular_movies_titles
+            if (raw_data := self._fetch_movie_from_api(title))
+        ]
 
         if not new_movies:
             logging.error("Failed to fetch any movie details for seeding.")
@@ -191,21 +198,36 @@ class MovieRecommender:
         self.content_matrix = np.vstack([self.content_matrix, new_row])
         self.tfidf_matrix = np.vstack([self.tfidf_matrix, new_movie_vector])
 
-    def add_movie(self, title: str) -> Optional[dict]:
-        """Adds a movie to the DB and performs a fast in-memory update."""
+    def find_or_add_movie(self, title: str, background_tasks: BackgroundTasks) -> Optional[dict]:
+        """
+        Finds a movie in the local DB first (cache). If not found,
+        fetches from the API, adds it, and triggers a background rebuild.
+        """
+        if not self.movies_df.empty:
+            local_match = self.movies_df[self.movies_df['title'].str.lower() == title.lower()]
+            if not local_match.empty:
+                logging.info(f"Found '{title}' in local database cache.")
+                return local_match.reset_index().iloc[0].to_dict()
+
+        logging.info(f"'{title}' not in local cache. Fetching from OMDb API.")
         raw_data = self._fetch_movie_from_api(title)
         if raw_data and (movie_data := self._process_api_data(raw_data)):
             if movie_data["id"] not in self.movies_df.index:
                 logging.info(f"Adding new movie: {movie_data['title']}")
                 new_movie_df = pd.DataFrame([movie_data]).set_index('id')
+                
                 self._update_content_matrix_for_new_movie(new_movie_df.iloc[0]["combined_features"])
                 self.movies_df = pd.concat([self.movies_df, new_movie_df])
+                
                 try:
                     with sqlite3.connect(self.db_path) as conn:
                         new_movie_df.reset_index().to_sql("movies", conn, if_exists="append", index=False)
                 except sqlite3.Error as e:
                     logging.error(f"Database error while adding movie: {e}")
                     return None
+                
+                background_tasks.add_task(self.build_models)
+                
             return movie_data
         return None
 
@@ -215,10 +237,10 @@ class MovieRecommender:
             raise HTTPException(status_code=503, detail="Recommendation models are not ready.")
         if not all(mid in self.movies_df.index for mid in selected_movie_ids):
             raise HTTPException(status_code=404, detail="One or more selected movies not found.")
-        
+
         indices = [self.movies_df.index.get_loc(mid) for mid in selected_movie_ids]
         content_scores = np.mean(self.content_matrix[indices, :], axis=0)
-        
+
         collab_scores = np.zeros(len(self.movies_df))
         if self.collab_model and self.user_movie_matrix is not None:
             for movie_id in selected_movie_ids:
@@ -238,11 +260,11 @@ class MovieRecommender:
         content_scores_norm = self.scaler.fit_transform(content_scores.reshape(-1, 1)).flatten()
         collab_scores_norm = self.scaler.fit_transform(collab_scores.reshape(-1, 1)).flatten()
         hybrid_scores = (CONFIG["CONTENT_WEIGHT"] * content_scores_norm) + (CONFIG["COLLAB_WEIGHT"] * collab_scores_norm)
-        
+
         recs_df = pd.DataFrame({'score': hybrid_scores, 'id': self.movies_df.index})
         recs_df = recs_df[~recs_df['id'].isin(selected_movie_ids)]
         recs_df = recs_df.sort_values('score', ascending=False).head(num_recs)
-        
+
         return self.movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
 
 
@@ -301,10 +323,11 @@ async def recommend_movies(request: MovieRequest):
 
 @app.get("/search/{title}", response_model=Movie)
 async def search_movie(title: str, background_tasks: BackgroundTasks):
-    """Searches for a movie, adds it, and triggers a full model rebuild in the background."""
-    movie = recommender.add_movie(title)
+    """
+    Searches for a movie first in the local DB. If not found, fetches
+    from the OMDb API, adds it, and triggers a background rebuild.
+    """
+    movie = recommender.find_or_add_movie(title, background_tasks)
     if not movie:
         raise HTTPException(status_code=404, detail=f"Movie '{title}' not found.")
-    
-    background_tasks.add_task(recommender.build_models)
     return movie
