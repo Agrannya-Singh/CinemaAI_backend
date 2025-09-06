@@ -1,4 +1,3 @@
-```python
 import os
 import sqlite3
 import requests
@@ -369,4 +368,3 @@ async def search_movie(title: str):
     if not movie:
         raise HTTPException(status_code=404, detail=f"Movie '{title}' not found.")
     return movie
-```
