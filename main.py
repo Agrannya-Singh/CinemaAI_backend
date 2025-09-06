@@ -40,22 +40,24 @@ class MovieRecommender:
         self.load_data()
         self.build_models()
 
-    def load_data(self):
-        """Load movies and ratings from the database."""
-        with sqlite3.connect(self.db_path) as conn:
-            self.movies_df = pd.read_sql_query("SELECT * FROM movies", conn, index_col='id')
-            self.ratings_df = pd.read_sql_query("SELECT * FROM ratings", conn)
-            # Ensure database tables exist if they don't
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS movies (
-                    id TEXT PRIMARY KEY, title TEXT, overview TEXT, genres TEXT, director TEXT,
-                    cast TEXT, poster_path TEXT, vote_average REAL, release_date TEXT, combined_features TEXT
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS ratings (user_id INTEGER, movie_id TEXT, rating REAL)
-            """)
-
+    # NEW CORRECTED VERSION
+def load_data(self):
+    """Load movies and ratings from the database."""
+    with sqlite3.connect(self.db_path) as conn:
+        # First, ensure the tables exist.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS movies (
+                id TEXT PRIMARY KEY, title TEXT, overview TEXT, genres TEXT, director TEXT,
+                cast TEXT, poster_path TEXT, vote_average REAL, release_date TEXT, combined_features TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ratings (user_id INTEGER, movie_id TEXT, rating REAL)
+        """)
+        
+        # THEN, read the data from them.
+        self.movies_df = pd.read_sql_query("SELECT * FROM movies", conn, index_col='id')
+        self.ratings_df = pd.read_sql_query("SELECT * FROM ratings", conn)
     def build_models(self):
         """Build (or rebuild) both recommendation models."""
         self._build_content_model()
