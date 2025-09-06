@@ -5,3 +5,4 @@ numpy==2.1.2
 scikit-learn==1.5.2
 requests==2.32.3
 python-dotenv==1.0.1
+scikit-surprise
