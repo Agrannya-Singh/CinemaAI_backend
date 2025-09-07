@@ -26,7 +26,9 @@ OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 if not OMDB_API_KEY:
     raise ValueError("OMDB_API_KEY not found in environment variables.")
 
-DB_PATH = "/tmp/movies.db"  # Using /tmp as requested for temporary storage
+# The database file is now expected to be in the same directory as the code.
+# For Render, this means it's read from the cloned repository.
+DB_PATH = "movies.db"
 OMDB_API_URL = "http://www.omdbapi.com/"
 
 CONFIG = {
@@ -36,113 +38,14 @@ CONFIG = {
     "COLLAB_WEIGHT": 0.5,
 }
 
-# Predefined list of movies for seeding the database
-# This list can be expanded to 200-500 titles for a richer dataset.
-# Predefined list of 250 acclaimed and popular movies for seeding the database.
-PREDEFINED_MOVIE_TITLES = [
-    # All-Time Classics & Essentials
-    "The Shawshank Redemption", "The Godfather", "The Dark Knight", "The Godfather Part II",
-    "12 Angry Men", "Schindler's List", "The Lord of the Rings: The Return of the King",
-    "Pulp Fiction", "The Lord of the Rings: The Fellowship of the Ring", "Forrest Gump",
-    "Fight Club", "Inception", "The Lord of the Rings: The Two Towers",
-    "Star Wars: Episode V - The Empire Strikes Back", "The Matrix", "Goodfellas",
-    "One Flew Over the Cuckoo's Nest", "Seven Samurai", "Se7en", "City of God",
-    "The Silence of the Lambs", "It's a Wonderful Life", "Life Is Beautiful", "Star Wars: Episode IV - A New Hope",
-    "Saving Private Ryan", "Spirited Away", "The Green Mile", "Interstellar", "Parasite",
-
-    # 90s Hits & Independent Cinema
-    "Léon: The Professional", "The Usual Suspects", "Back to the Future", "The Pianist",
-    "Terminator 2: Judgment Day", "Modern Times", "Psycho", "Gladiator", "The Lion King",
-    "American History X", "The Departed", "The Prestige", "Whiplash", "Casablanca",
-    "Grave of the Fireflies", "Rear Window", "Cinema Paradiso", "Alien", "Apocalypse Now",
-
-    # Sci-Fi & Fantasy Epics
-    "Aliens", "Once Upon a Time in the West", "Blade Runner", "Dune", "Mad Max: Fury Road",
-    "The Thing", "2001: A Space Odyssey", "A Clockwork Orange", "District 9",
-    "Children of Men", "V for Vendetta", "Arrival", "Blade Runner 2049",
-    "The Princess Bride", "Pan's Labyrinth", "Howl's Moving Castle", "Princess Mononoke",
-
-    # Acclaimed Dramas
-    "The Intouchables", "Django Unchained", "The Dark Knight Rises", "3 Idiots",
-    "WALL·E", "The Lives of Others", "Oldboy", "Amadeus", "Braveheart",
-    "Good Will Hunting", "Requiem for a Dream", "A Beautiful Mind", "Eternal Sunshine of the Spotless Mind",
-    "No Country for Old Men", "There Will Be Blood", "The Social Network", "Her",
-    "Spotlight", "Moonlight", "Manchester by the Sea", "The Father", "Nomadland",
-    "Sound of Metal", "Minari", "Another Round", "The Truman Show", "Dead Poets Society",
-
-    # Action, Thriller & Crime
-    "Reservoir Dogs", "Inglourious Basterds", "Snatch", "Lock, Stock and Two Smoking Barrels",
-    "The Big Lebowski", "Fargo", "Heat", "Collateral", "Drive", "John Wick",
-    "Die Hard", "The Fugitive", "Kill Bill: Vol. 1", "Kill Bill: Vol. 2",
-    "Casino Royale", "Skyfall", "Mission: Impossible - Fallout", "The Bourne Ultimatum",
-    "Gone Girl", "Prisoners", "Zodiac", "Memento", "L.A. Confidential",
-
-    # Animation & Family
-    "Toy Story", "Toy Story 3", "Up", "Finding Nemo", "Ratatouille", "The Incredibles",
-    "Coco", "Spider-Man: Into the Spider-Verse", "Klaus", "Your Name.", "A Silent Voice",
-    "My Neighbor Totoro", "The Iron Giant", "Who Framed Roger Rabbit", "E.T. the Extra-Terrestrial",
-
-    # Comedy
-    "Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb", "Some Like It Hot",
-    "The Grand Budapest Hotel", "Little Miss Sunshine", "Shaun of the Dead", "Hot Fuzz",
-
-    # Horror & Suspense
-    "The Shining", "The Exorcist", "Rosemary's Baby", "Hereditary", "Get Out",
-    "A Quiet Place", "The Conjuring", "It Follows", "The Babadook", "The Witch",
-
-    # Westerns
-    "The Good, the Bad and the Ugly", "Unforgiven", "Once Upon a Time in America",
-    "The Searchers", "High Noon", "Rio Bravo", "Tombstone",
-
-    # War Films
-    "Full Metal Jacket", "Platoon", "Das Boot", "1917", "Dunkirk", "Hacksaw Ridge",
-    "Paths of Glory", "The Great Escape", "Lawrence of Arabia",
-
-    # Romance & Musicals
-    "La La Land", "Before Sunrise", "Before Sunset", "Amélie", "Singin' in the Rain",
-    "The Sound of Music", "West Side Story", "Grease", "Chicago",
-
-    # More International Classics
-    "The Battle of Algiers", "Bicycle Thieves", "Rashomon", "8½", "Stalker",
-    "Come and See", "Harakiri", "Ran", "Ikiru", "Downfall", "A Separation",
-
-    # More Modern Hits
-    "The Wolf of Wall Street", "Jojo Rabbit", "Knives Out", "Once Upon a Time in Hollywood",
-    "The Revenant", "The Grand Budapest Hotel", "Birdman", "Boyhood",
-    "The Irishman", "Marriage Story", "Ford v Ferrari", "1917",
-    "Everything Everywhere All at Once", "Top Gun: Maverick", "Oppenheimer", "Past Lives",
-    "Poor Things", "Anatomy of a Fall", "The Holdovers", "Spider-Man: No Way Home",
-
-    # Cult Classics
-    "Donnie Darko", "Withnail & I", "This Is Spinal Tap", "The Rocky Horror Picture Show",
-    "Heathers", "Office Space", "Clerks", "Dazed and Confused",
-
-    # Documentaries
-    "Planet Earth", "Blue Planet II", "Cosmos", "The Civil War", "When We Were Kings",
-    "Man on Wire", "Searching for Sugar Man", "My Octopus Teacher",
-
-    # More Timeless Movies
-    "Citizen Kane", "All About Eve", "Sunset Boulevard", "Vertigo", "North by Northwest",
-    "Singin' in the Rain", "The Apartment", "To Kill a Mockingbird", "Dr. Zhivago",
-    "The Bridge on the River Kwai", "Ben-Hur", "Butch Cassidy and the Sundance Kid",
-    "The Sting", "Chinatown", "Taxi Driver", "Network", "Annie Hall",
-    "Raging Bull", "The Elephant Man", "Gandhi", "Rain Man", "Driving Miss Daisy",
-
-    # Final Additions
-    "Groundhog Day", "Jaws", "Close Encounters of the Third Kind", "Rocky", "The Karate Kid",
-    "Ghostbusters", "Ferris Bueller's Day Off", "The Breakfast Club", "Stand by Me",
-    "When Harry Met Sally...", "Jurassic Park", "Clueless", "Scream", "The Sixth Sense",
-    "Almost Famous", "Lost in Translation", "Juno", "Slumdog Millionaire",
-    "The King's Speech", "Argo", "12 Years a Slave", "The Shape of Water", "Green Book"
-]
-
 
 # --- Recommendation Engine Class ---
 
 class MovieRecommender:
-    """Manages movie data, recommendation models, and recommendation logic."""
+    """Manages movie data from a pre-populated DB, models, and recommendation logic."""
 
     def __init__(self, db_path: str = DB_PATH):
+        """Initializes the recommender, loads data from the bundled DB, and builds models."""
         self.db_path = db_path
         self.movies_df = pd.DataFrame()
         self.ratings_df = pd.DataFrame()
@@ -155,58 +58,25 @@ class MovieRecommender:
         self.load_data()
         self.build_models()
 
-    def _seed_initial_movies(self) -> None:
-        """Seeds the database from a predefined list of movie titles."""
-        logging.info("Database is empty. Seeding with predefined movie list...")
-        
-        new_movies = [
-            self._process_api_data(raw_data)
-            for title in PREDEFINED_MOVIE_TITLES
-            if (raw_data := self._fetch_movie_from_api(title))
-        ]
-
-        if not new_movies:
-            logging.error("Failed to fetch any movie details for seeding.")
+    def load_data(self) -> None:
+        """Loads data from the pre-populated database file."""
+        logging.info("Loading data from pre-bundled database...")
+        if not os.path.exists(self.db_path):
+            logging.error(f"Database file not found at {self.db_path}. Please run seed.py and commit the file.")
+            # In a real app, you might want to stop the server from starting.
+            # For now, we'll proceed with empty dataframes.
             return
 
         try:
             with sqlite3.connect(self.db_path) as conn:
-                pd.DataFrame(new_movies).to_sql("movies", conn, if_exists="append", index=False)
-            logging.info(f"Successfully seeded database with {len(new_movies)} movies.")
-        except sqlite3.Error as e:
-            logging.error(f"Database error during seeding: {e}")
-
-    def load_data(self) -> None:
-        """Loads data and seeds the database on the first run."""
-        logging.info("Loading data from database...")
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS movies (
-                        id TEXT PRIMARY KEY, title TEXT, overview TEXT, genres TEXT,
-                        director TEXT, cast TEXT, poster_path TEXT, vote_average REAL,
-                        release_date TEXT, combined_features TEXT
-                    )
-                    """
-                )
-                conn.execute("CREATE TABLE IF NOT EXISTS ratings (user_id INTEGER, movie_id TEXT, rating REAL)")
-
-                if conn.execute("SELECT COUNT(*) FROM movies").fetchone()[0] == 0:
-                    self._seed_initial_movies()
-
                 self.movies_df = pd.read_sql_query("SELECT * FROM movies", conn, index_col='id')
+                # Check if ratings table exists, create if not
+                conn.execute("CREATE TABLE IF NOT EXISTS ratings (user_id INTEGER, movie_id TEXT, rating REAL)")
                 self.ratings_df = pd.read_sql_query("SELECT * FROM ratings", conn)
                 logging.info(f"Loaded {len(self.movies_df)} movies and {len(self.ratings_df)} ratings.")
-        except sqlite3.Error as e:
+        except (sqlite3.Error, pd.errors.DatabaseError) as e:
             logging.error(f"Database error during data load: {e}")
             raise
-
-    # ... The rest of the class methods remain unchanged ...
-    # (build_models, _build_content_model, _build_collaborative_model, 
-    # _fetch_movie_from_api, _process_api_data, _update_content_matrix_for_new_movie,
-    # find_or_add_movie, get_recommendations)
 
     def build_models(self) -> None:
         """Builds (or rebuilds) both recommendation models."""
@@ -247,8 +117,6 @@ class MovieRecommender:
             resp.raise_for_status()
             data = resp.json()
             return data if data.get("Response") == "True" else None
-        except requests.Timeout:
-            logging.error(f"Timeout fetching '{title}' from OMDb.")
         except requests.RequestException as e:
             logging.error(f"Error fetching '{title}': {e}")
         return None
@@ -266,7 +134,8 @@ class MovieRecommender:
         return {
             "id": data.get("imdbID"), "title": data.get("Title"), "overview": plot,
             "genres": genres, "director": director, "cast": actors,
-            "poster_path": data.get("Poster"), "vote_average": float(data.get("imdbRating", 0.0) if data.get("imdbRating") != "N/A" else 0.0),
+            "poster_path": data.get("Poster"),
+            "vote_average": float(data.get("imdbRating", 0.0) if data.get("imdbRating") != "N/A" else 0.0),
             "release_date": data.get("Year"), "combined_features": combined_features
         }
 
@@ -284,19 +153,19 @@ class MovieRecommender:
     def find_or_add_movie(self, title: str, background_tasks: BackgroundTasks) -> Optional[dict]:
         """
         Finds a movie in the local DB first (cache). If not found,
-        fetches from the API, adds it, and triggers a background rebuild.
+        fetches from the API, appends it, and triggers a background rebuild.
         """
         if not self.movies_df.empty:
             local_match = self.movies_df[self.movies_df['title'].str.lower() == title.lower()]
             if not local_match.empty:
-                logging.info(f"Found '{title}' in local database cache.")
+                logging.info(f"Found '{title}' in local database.")
                 return local_match.reset_index().iloc[0].to_dict()
 
-        logging.info(f"'{title}' not in local cache. Fetching from OMDb API.")
+        logging.info(f"'{title}' not in local cache. Fetching from OMDb API to append.")
         raw_data = self._fetch_movie_from_api(title)
         if raw_data and (movie_data := self._process_api_data(raw_data)):
             if movie_data["id"] not in self.movies_df.index:
-                logging.info(f"Adding new movie: {movie_data['title']}")
+                logging.info(f"Appending new movie: {movie_data['title']}")
                 new_movie_df = pd.DataFrame([movie_data]).set_index('id')
                 
                 self._update_content_matrix_for_new_movie(new_movie_df.iloc[0]["combined_features"])
@@ -306,7 +175,7 @@ class MovieRecommender:
                     with sqlite3.connect(self.db_path) as conn:
                         new_movie_df.reset_index().to_sql("movies", conn, if_exists="append", index=False)
                 except sqlite3.Error as e:
-                    logging.error(f"Database error while adding movie: {e}")
+                    logging.error(f"Database error while appending movie: {e}")
                     return None
                 
                 background_tasks.add_task(self.build_models)
@@ -350,6 +219,7 @@ class MovieRecommender:
 
         return self.movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
 
+
 # --- FastAPI Application ---
 
 app = FastAPI(title="CinemaAI Recommendation API", description="A hybrid movie recommendation engine.")
@@ -386,7 +256,7 @@ class Movie(BaseModel):
 
 @app.get("/movies", response_model=List[Movie])
 async def get_movies():
-    """Returns a list of all movies currently in the database."""
+    """Returns the list of all movies from the pre-populated database."""
     if recommender.movies_df.empty:
         return []
     return recommender.movies_df.reset_index().to_dict(orient="records")
@@ -405,7 +275,7 @@ async def recommend_movies(request: MovieRequest):
 async def search_movie(title: str, background_tasks: BackgroundTasks):
     """
     Searches for a movie first in the local DB. If not found, fetches
-    from the OMDb API, adds it, and triggers a background rebuild.
+    from the OMDb API, appends it, and triggers a background rebuild.
     """
     movie = recommender.find_or_add_movie(title, background_tasks)
     if not movie:
