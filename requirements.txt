@@ -1,13 +1,13 @@
-# Pin NumPy FIRST to resolve binary conflicts
-numpy==1.26.4
+# requirements.txt
 
 # Core application
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 
-# Data science stack (now only uses scikit-learn)
-pandas==2.2.2
+# Data science stack
+# Let scikit-learn determine the correct numpy and pandas versions
 scikit-learn==1.4.2
+pandas==2.2.2
 
 # Utilities
 python-dotenv==1.0.1
