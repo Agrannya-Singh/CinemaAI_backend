@@ -19,7 +19,7 @@ app = FastAPI(title="CinemaAI Recommendation API", description="A hybrid movie r
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this to your frontend URL
+    allow_origins=["*"],  # potential security risk. To Do:  restrict this to frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
