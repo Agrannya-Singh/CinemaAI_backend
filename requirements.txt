@@ -6,7 +6,7 @@ uvicorn[standard]==0.29.0
 
 # Data science stack
 # Let scikit-learn determine the correct numpy and pandas versions
-scikit-learn==1.4.2
+scikit-learn==1.7.2
 pandas==2.2.2
 
 # Utilities
