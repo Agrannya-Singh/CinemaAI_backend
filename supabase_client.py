@@ -53,8 +53,9 @@ def download_from_storage(bucket_name: str, file_path: str) -> Optional[bytes]:
 
 def ensure_local_dir(path: str) -> None:
     """Ensure local directory exists."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-
+    dir_ = os.path.dirname(path)
+    if dir_:
+        os.makedirs(dir_, exist_ok=True)
 def save_model_with_storage(local_path: str, bucket_name: str = "models") -> bool:
     """Save a model both locally and to Supabase Storage."""
     try:
