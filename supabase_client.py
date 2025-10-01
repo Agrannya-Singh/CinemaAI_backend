@@ -8,6 +8,7 @@ import config
 
 # Initialize Supabase client
 try:
+    # Removed proxy argument
     supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
     logging.info("Supabase client initialized successfully.")
 except Exception as e:
