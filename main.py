@@ -54,7 +54,7 @@ class Movie(BaseModel):
 @app.get("/", summary="Health Check")
 def read_root():
     """Health check endpoint to confirm the API is running."""
-    return {"recommendations": recommendations}
+    return {"status": "API is running"}
 
 # --- Admin Endpoints ---
 
