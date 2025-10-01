@@ -11,9 +11,7 @@ from typing import List, Optional, Dict, Any
 
 # Import the logic functions from your new recommender.py file
 import recommender
-@@
--from auth import require_auth
--
+
  # Import authentication utilities
  from auth import (
      UserSignUp, UserLogin, Token,
