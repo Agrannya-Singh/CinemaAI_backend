@@ -3,13 +3,15 @@
 #streamlined and optimzed for quick start up
 
 import logging
+import threading
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 # Import the logic functions from your new recommender.py file
 import recommender
+from auth import require_auth
 
 # Import authentication utilities
 from auth import (
@@ -47,21 +49,37 @@ class Movie(BaseModel):
     poster_path: Optional[str] = None
     vote_average: Optional[float] = None
     release_date: Optional[str] = None
-
 # --- API Endpoints ---
 
 @app.get("/", summary="Health Check")
 def read_root():
     """Health check endpoint to confirm the API is running."""
-    return {"status": "API is running"}
+    return {"recommendations": recommendations}
 
-# --- Authentication Endpoints ---
+# --- Admin Endpoints ---
+
+@app.post("/admin/retrain-models", response_model=Dict[str, Any], tags=["admin"])
+async def retrain_models(current_user: dict = Depends(require_auth)):
+    """
+    Manually trigger retraining of the recommendation models.
+    Requires authentication.
+    """
+    # Start retraining in background
+    thread = threading.Thread(target=recommender._retrain_models, daemon=True)
+    thread.start()
+    
+    return {
+        "status": "success",
+        "message": "Model retraining started in background. This may take a few minutes.",
+        "details": "Check server logs for progress and completion."
+    }
+
+# --- Run the API ---
 
 @app.post("/auth/signup", response_model=Token, summary="Sign Up")
 async def signup(user_data: UserSignUp):
     """
     Register a new user with email and password.
-    Returns an access token upon successful registration.
     """
     return await sign_up_user(user_data)
 

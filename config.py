@@ -35,8 +35,17 @@ API_TIMEOUT_SECONDS = 10
 MOVIES_TABLE = "movies"
 USERS_TABLE = "users"
 USER_RATINGS_TABLE = "user_ratings"
+MODELS_TABLE = "movies"  # Using movies table for model training
+
+# --- Supabase Storage Configuration ---
+STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "trained_models")  # Your Supabase Storage bucket name
+
+# --- Model Training Configuration ---
+MODEL_UPDATE_DELAY = 300  # 5 minutes in seconds (time to wait after last movie addition before retraining)
+MIN_MOVIES_FOR_RETRAIN = 5  # Minimum new movies before considering retraining
+MAX_RETRAIN_INTERVAL = 86400  # 24 hours in seconds (force retrain after this time)
 
 # --- Model Weights ---
 CONTENT_WEIGHT = 0.8
 COLLAB_WEIGHT = 0.2 
-#collab model is how other users liked movies #before the current user. as userbase #increase we increase collab weight 
+#collab model is how other users liked movies #before the current user. as userbase #increase we increase collab weight
