@@ -12,12 +12,12 @@ from typing import List, Optional, Dict, Any
 # Import the logic functions from your new recommender.py file
 import recommender
 
- # Import authentication utilities
- from auth import (
-     UserSignUp, UserLogin, Token,
-     sign_up_user, login_user,
-     get_current_user, require_auth
- )
+# Import authentication utilities
+from auth import (
+    UserSignUp, UserLogin, Token,
+    sign_up_user, login_user,
+    get_current_user, require_auth
+)
 
 # --- Configuration & Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
