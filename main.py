@@ -3,13 +3,20 @@
 #streamlined and optimzed for quick start up
 
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
 # Import the logic functions from your new recommender.py file
 import recommender
+
+# Import authentication utilities
+from auth import (
+    UserSignUp, UserLogin, Token, 
+    sign_up_user, login_user, 
+    get_current_user, require_auth
+)
 
 # --- Configuration & Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -48,19 +55,47 @@ def read_root():
     """Health check endpoint to confirm the API is running."""
     return {"status": "API is running"}
 
+# --- Authentication Endpoints ---
+
+@app.post("/auth/signup", response_model=Token, summary="Sign Up")
+async def signup(user_data: UserSignUp):
+    """
+    Register a new user with email and password.
+    Returns an access token upon successful registration.
+    """
+    return await sign_up_user(user_data)
+
+@app.post("/auth/login", response_model=Token, summary="Login")
+async def login(user_data: UserLogin):
+    """
+    Login with email and password.
+    Returns an access token upon successful authentication.
+    """
+    return await login_user(user_data)
+
+@app.get("/auth/me", summary="Get Current User")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """
+    Get the current authenticated user's information.
+    Requires a valid JWT token in the Authorization header.
+    """
+    return current_user
+
 @app.get("/movies", response_model=List[Movie], summary="Get All Movies")
-def get_movies():
+def get_movies(current_user: dict = Depends(require_auth)):
     """
     Returns the list of all movies available for recommendations.
     This is fast because it reads from the pre-loaded DataFrame in memory.
+    Requires authentication.
     """
     return recommender.get_all_movies()
 
 @app.post("/recommend", response_model=List[Movie], summary="Get Movie Recommendations")
-def recommend_movies(request: MovieRequest):
+def recommend_movies(request: MovieRequest, current_user: dict = Depends(require_auth)):
     """
     Generates movie recommendations based on a list of selected movie IDs.
     This is a CPU-bound task, so we use a standard 'def' endpoint.
+    Requires authentication.
     """
     try:
         recommendations = recommender.get_recommendations(
@@ -75,11 +110,12 @@ def recommend_movies(request: MovieRequest):
         raise HTTPException(status_code=500, detail="Internal server error.")
 
 @app.get("/search/{title}", response_model=Movie, summary="Search for a Movie")
-def search_movie(title: str):
+def search_movie(title: str, current_user: dict = Depends(require_auth)):
     """
     Searches for a movie in the local cache. If not found, fetches from OMDb,
     adds it to the database, and returns the movie data.
-    Note: The live models are NOT updated with this new movie. may cause hallucinations 
+    Note: The live models are NOT updated with this new movie. may cause hallucinations
+    Requires authentication.
     """
     try:
         return recommender.find_or_add_movie(title)

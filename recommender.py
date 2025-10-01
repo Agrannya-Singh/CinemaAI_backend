@@ -6,13 +6,13 @@ import numpy as np
 import joblib
 import os
 import requests
-import sqlite3
 from scipy.sparse import load_npz
 from sklearn.preprocessing import MinMaxScaler
 from fastapi import HTTPException
 
-# Import settings f config file
+# Import settings from config file
 import config
+from supabase_client import get_supabase_client
 
 # --- Load Pre-trained Models and Data (Happens only once on startup) ---
 try:
@@ -124,22 +124,29 @@ def _process_api_data(data: dict) -> dict:
     }
 
 def _add_movie_to_db(movie_data: dict):
-    """Adds a new movie to the SQLite database."""
+    """Adds a new movie to the Supabase database."""
     try:
-        with sqlite3.connect(config.DB_PATH) as conn:
-            #  INSERT OR IGNORE to prevent adding duplicates if another process adds it first
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR IGNORE INTO movies (id, title, overview, genres, director, cast, poster_path, vote_average, release_date, combined_features)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                movie_data["id"], movie_data["title"], movie_data["overview"], movie_data["genres"],
-                movie_data["director"], movie_data["cast"], movie_data["poster_path"],
-                movie_data["vote_average"], movie_data["release_date"], movie_data["combined_features"]
-            ))
-            conn.commit()
-            logging.info(f"Successfully added '{movie_data['title']}' to the database.")
-    except sqlite3.Error as e:
+        supabase = get_supabase_client()
+        
+        # Prepare data for Supabase insert
+        insert_data = {
+            "id": movie_data["id"],
+            "title": movie_data["title"],
+            "overview": movie_data["overview"],
+            "genres": movie_data["genres"],
+            "director": movie_data["director"],
+            "cast": movie_data["cast"],
+            "poster_path": movie_data["poster_path"],
+            "vote_average": movie_data["vote_average"],
+            "release_date": movie_data["release_date"],
+            "combined_features": movie_data["combined_features"]
+        }
+        
+        # Use upsert to prevent duplicates (insert or update if exists)
+        response = supabase.table(config.MOVIES_TABLE).upsert(insert_data, on_conflict="id").execute()
+        
+        logging.info(f"Successfully added '{movie_data['title']}' to the Supabase database.")
+    except Exception as e:
         logging.error(f"Database error while adding movie: {e}")
         # Not raising an exception here to allow the API to return the movie data
         # even if the database write fails.
