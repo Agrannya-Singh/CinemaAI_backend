@@ -59,22 +59,40 @@ def read_root():
 
 # --- Admin Endpoints ---
 
-@app.post("/admin/retrain-models", response_model=Dict[str, Any], tags=["admin"])
+_retrain_lock = threading.Lock()
+_retrain_in_progress = False
+
+@app.post("/admin/retrain-models", response_model=Dict[str, Any], tags=["admin"], status_code=202)
 async def retrain_models(current_user: dict = Depends(require_auth)):
     """
     Manually trigger retraining of the recommendation models.
     Requires authentication.
     """
+    global _retrain_in_progress
+    with _retrain_lock:
+        if _retrain_in_progress:
+            return {
+                "status": "in_progress",
+                "message": "Retraining already running."
+            }
+        _retrain_in_progress = True
+
     # Start retraining in background
-    thread = threading.Thread(target=recommender._retrain_models, daemon=True)
+    def _run():
+        try:
+            recommender._retrain_models()
+        finally:
+            global _retrain_in_progress
+            _retrain_in_progress = False
+
+    thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-    
+
     return {
         "status": "success",
         "message": "Model retraining started in background. This may take a few minutes.",
         "details": "Check server logs for progress and completion."
     }
-
 # --- Run the API ---
 
 @app.post("/auth/signup", response_model=Token, summary="Sign Up")
