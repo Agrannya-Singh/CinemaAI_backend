@@ -29,7 +29,7 @@ The backend has been migrated from SQLite to Supabase with the following key cha
   ```json
   {
     "email": "user@example.com",
-    "password": "securepassword123",
+    "password": "your-secure-password",
     "full_name": "John Doe"
   }
   ```
