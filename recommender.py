@@ -131,12 +131,12 @@ def _schedule_retrain() -> None:
     Uses a background thread to avoid blocking the main application.
     """
     global pending_retrain, retrain_thread, last_movie_addition, new_movie_count
-    
+
     with retrain_lock:
         current_time = datetime.now()
         last_movie_addition = current_time
         new_movie_count += 1
-        
+
         # Check if we should schedule a retrain
         time_since_last_retrain = (current_time - last_retrain_time).total_seconds()
         should_retrain = (
@@ -144,38 +144,35 @@ def _schedule_retrain() -> None:
              time_since_last_retrain > config.MODEL_UPDATE_DELAY) or
             time_since_last_retrain > config.MAX_RETRAIN_INTERVAL
         )
-        
+
         if should_retrain and not pending_retrain:
             pending_retrain = True
             logging.info(f"Scheduling model retraining in {config.MODEL_UPDATE_DELAY} seconds...")
-            
+
             def delayed_retrain():
                 global pending_retrain, last_retrain_time, new_movie_count
-                
-                # Wait for the delay period
-                time.sleep(config.MODEL_UPDATE_DELAY)
-                
+
                 try:
-                    # Check if we still need to retrain
-                    with retrain_lock:
-                        if not pending_retrain:
-                            return
-                        
-                        current_time = datetime.now()
-                        time_since_last_addition = (current_time - last_movie_addition).total_seconds()
-                        
-                        # Only retrain if no new movies were added during the delay
-                        if time_since_last_addition >= config.MODEL_UPDATE_DELAY:
-                            logging.info(f"Starting scheduled model retraining with {new_movie_count} new movies")
-                            _retrain_models()
-                            last_retrain_time = datetime.now()
-                            new_movie_count = 0
-                            pending_retrain = False
+                    while True:
+                        time.sleep(config.MODEL_UPDATE_DELAY)
+                        with retrain_lock:
+                            if not pending_retrain:
+                                return
+                            quiet_for = (datetime.now() - last_movie_addition).total_seconds()
+                            if quiet_for >= config.MODEL_UPDATE_DELAY:
+                                logging.info(
+                                    f"Starting scheduled model retraining with {new_movie_count} new movies"
+                                )
+                                _retrain_models()
+                                last_retrain_time = datetime.now()
+                                new_movie_count = 0
+                                pending_retrain = False
+                                return
                 except Exception as e:
                     logging.error(f"Error in retrain scheduler: {e}")
                     with retrain_lock:
                         pending_retrain = False
-            
+
             # Start the retrain thread
             retrain_thread = threading.Thread(target=delayed_retrain, daemon=True)
             retrain_thread.start()
