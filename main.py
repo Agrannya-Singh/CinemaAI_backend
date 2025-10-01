@@ -23,7 +23,20 @@ from auth import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- FastAPI Application ---
-app = FastAPI(title="CinemaAI Recommendation API", description="A hybrid movie recommendation engine.")
+app = FastAPI(
+    title="CinemaAI Recommendation API", 
+    description="A hybrid movie recommendation engine."
+)
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    On startup, trigger the background loading of the models.
+    """
+    logging.info("API started. Triggering background model loading...")
+    thread = threading.Thread(target=recommender.load_models_background)
+    thread.daemon = True
+    thread.start()
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,12 +61,21 @@ class Movie(BaseModel):
     poster_path: Optional[str] = None
     vote_average: Optional[float] = None
     release_date: Optional[str] = None
+    
 # --- API Endpoints ---
 
 @app.get("/", summary="Health Check")
 def read_root():
     """Health check endpoint to confirm the API is running."""
     return {"status": "API is running"}
+
+@app.get("/models/status", summary="Check Model Loading Status")
+def get_models_status():
+    """
+    Returns the loading status of the recommendation models.
+    Useful for deployment checks.
+    """
+    return {"models_loaded": recommender.models_loaded}
 
 # --- Admin Endpoints ---
 
@@ -123,7 +145,14 @@ def get_movies(current_user: dict = Depends(require_auth)):
     This is fast because it reads from the pre-loaded DataFrame in memory.
     Requires authentication.
     """
-    return recommender.get_all_movies()
+    try:
+        return recommender.get_all_movies()
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error getting all movies: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
 
 @app.post("/recommend", response_model=List[Movie], summary="Get Movie Recommendations")
 def recommend_movies(request: MovieRequest, current_user: dict = Depends(require_auth)):

@@ -25,32 +25,57 @@ movies_df = pd.DataFrame()
 content_matrix = None
 collab_model = None
 user_movie_matrix = None
+models_loaded = False
+models_lock = threading.Lock()
 
 # --- Model & Data Loading ---
-try:
-    logging.info("Loading pre-trained models and data...")
+def load_models_background():
+    """Loads all models and data in a background thread."""
+    global movies_df, content_matrix, collab_model, user_movie_matrix, models_loaded
     
-    # Define paths to model assets
-    assets_path = config.ASSETS_PATH
-    movies_df_path = os.path.join(assets_path, "movies_df.pkl")
-    content_matrix_path = os.path.join(assets_path, "content_matrix.joblib")
-    collab_model_path = os.path.join(assets_path, "collab_model.joblib")
-    user_movie_matrix_path = os.path.join(assets_path, "user_movie_matrix.pkl")
+    try:
+        logging.info("Starting background model loading...")
+        
+        # Define paths to model assets
+        assets_path = config.ASSETS_PATH
+        movies_df_path = os.path.join(assets_path, "movies_df.pkl")
+        content_matrix_path = os.path.join(assets_path, "content_matrix.joblib")
+        collab_model_path = os.path.join(assets_path, "collab_model.joblib")
+        user_movie_matrix_path = os.path.join(assets_path, "user_movie_matrix.pkl")
 
-    # Load data from files if they exist
-    if os.path.exists(movies_df_path):
-        movies_df = pd.read_pickle(movies_df_path)
-    if os.path.exists(content_matrix_path):
-        content_matrix = joblib.load(content_matrix_path)
-    if os.path.exists(collab_model_path):
-        collab_model = joblib.load(collab_model_path)
-    if os.path.exists(user_movie_matrix_path):
-        user_movie_matrix = pd.read_pickle(user_movie_matrix_path)
+        # Download from Supabase Storage if local files don't exist
+        from storage import storage
+        if not os.path.exists(assets_path):
+            os.makedirs(assets_path)
 
-    logging.info("Successfully loaded models and data.")
+        # Example of downloading a file (implement for all needed files)
+        if not os.path.exists(movies_df_path):
+            logging.info("Downloading movies_df.pkl from storage...")
+            storage.download_file("movies_df.pkl", movies_df_path)
+        
+        if not os.path.exists(content_matrix_path):
+            logging.info("Downloading content_matrix.joblib from storage...")
+            storage.download_file("content_matrix.joblib", content_matrix_path)
 
-except Exception as e:
-    logging.error(f"Error loading models: {e}")
+        # Load data from files
+        with models_lock:
+            if os.path.exists(movies_df_path):
+                movies_df = pd.read_pickle(movies_df_path)
+            if os.path.exists(content_matrix_path):
+                content_matrix = joblib.load(content_matrix_path)
+            if os.path.exists(collab_model_path):
+                collab_model = joblib.load(collab_model_path)
+            if os.path.exists(user_movie_matrix_path):
+                user_movie_matrix = pd.read_pickle(user_movie_matrix_path)
+            
+            models_loaded = True
+        
+        logging.info("Successfully loaded models and data in the background.")
+
+    except Exception as e:
+        logging.error(f"Error loading models in background: {e}")
+        # Optionally set a flag to indicate failure
+        models_loaded = False
 
 
 # --- Retraining State ---
@@ -65,39 +90,41 @@ new_movie_count = 0
 
 def get_recommendations(selected_movie_ids: list[str], num_recs: int = 10) -> list[dict]:
     """Generates hybrid recommendations using pre-loaded models."""
-    if content_matrix is None or movies_df.empty:
-        raise HTTPException(status_code=503, detail="Recommendation models are not ready.")
-    if not all(mid in movies_df.index for mid in selected_movie_ids):
-        raise HTTPException(status_code=404, detail="One or more selected movies not found.")
+    with models_lock:
+        if not models_loaded or content_matrix is None or movies_df.empty:
+            raise HTTPException(status_code=503, detail="Recommendation models are not ready.")
+        if not all(mid in movies_df.index for mid in selected_movie_ids):
+            raise HTTPException(status_code=404, detail="One or more selected movies not found.")
 
-    indices = [movies_df.index.get_loc(mid) for mid in selected_movie_ids]
-    content_scores = np.mean(content_matrix[indices, :], axis=0)
-    collab_scores = np.zeros(len(movies_df)) # Placeholder for your collab logic
+        indices = [movies_df.index.get_loc(mid) for mid in selected_movie_ids]
+        content_scores = np.mean(content_matrix[indices, :], axis=0)
+        collab_scores = np.zeros(len(movies_df)) # Placeholder for your collab logic
 
-    scaler = MinMaxScaler()
-    content_scores_norm = scaler.fit_transform(content_scores.reshape(-1, 1)).flatten()
-    collab_scores_norm = scaler.fit_transform(collab_scores.reshape(-1, 1)).flatten()
-    
-    hybrid_scores = (config.CONTENT_WEIGHT * content_scores_norm) + (config.COLLAB_WEIGHT * collab_scores_norm)
+        scaler = MinMaxScaler()
+        content_scores_norm = scaler.fit_transform(content_scores.reshape(-1, 1)).flatten()
+        collab_scores_norm = scaler.fit_transform(collab_scores.reshape(-1, 1)).flatten()
+        
+        hybrid_scores = (config.CONTENT_WEIGHT * content_scores_norm) + (config.COLLAB_WEIGHT * collab_scores_norm)
 
-    recs_df = pd.DataFrame({'score': hybrid_scores, 'id': movies_df.index})
-    recs_df = recs_df[~recs_df['id'].isin(selected_movie_ids)]
-    recs_df = recs_df.sort_values('score', ascending=False).head(num_recs)
+        recs_df = pd.DataFrame({'score': hybrid_scores, 'id': movies_df.index})
+        recs_df = recs_df[~recs_df['id'].isin(selected_movie_ids)]
+        recs_df = recs_df.sort_values('score', ascending=False).head(num_recs)
 
-    return movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
+        return movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
 
 def get_all_movies() -> list[dict]:
     """Returns the list of all movies from the pre-loaded dataframe."""
-    if movies_df.empty:
-        return []
-    return movies_df.reset_index().to_dict(orient="records")
+    with models_lock:
+        if not models_loaded or movies_df.empty:
+            return []
+        return movies_df.reset_index().to_dict(orient="records")
 
 def find_or_add_movie(title: str) -> dict:
     """
     Finds a movie in the local DB/cache. If not found, fetches from OMDb API,
     adds it to the database, but does NOT update the live models.
     """
-    if not movies_df.empty:
+    if models_loaded and not movies_df.empty:
         # Case-insensitive search on the pre-loaded dataframe
         local_match = movies_df[movies_df['title'].str.lower() == title.lower()]
         if not local_match.empty:
@@ -251,14 +278,15 @@ def _retrain_models() -> Dict[str, Any]:
         user_matrix_path = os.path.join(config.ASSETS_PATH, "user_movie_matrix.pkl")
         
         # Save locally
-        movies.to_pickle(movies_path)
-        joblib.dump(new_content_matrix, matrix_path)
-        
-        # Save collaborative filtering models if they exist
-        if collab_model is not None:
-            joblib.dump(collab_model, collab_path)
-        if user_movie_matrix is not None:
-            user_movie_matrix.to_pickle(user_matrix_path)
+        with models_lock:
+            movies.to_pickle(movies_path)
+            joblib.dump(new_content_matrix, matrix_path)
+            
+            # Save collaborative filtering models if they exist
+            if collab_model is not None:
+                joblib.dump(collab_model, collab_path)
+            if user_movie_matrix is not None:
+                user_movie_matrix.to_pickle(user_matrix_path)
         
         # Upload to Supabase Storage
         from storage import storage
@@ -271,8 +299,9 @@ def _retrain_models() -> Dict[str, Any]:
             storage.upload_file(user_matrix_path, "user_movie_matrix.pkl")
         
         # Update in-memory variables
-        movies_df = movies
-        content_matrix = new_content_matrix
+        with models_lock:
+            movies_df = movies
+            content_matrix = new_content_matrix
         
         logging.info("Model retraining completed successfully")
         return True

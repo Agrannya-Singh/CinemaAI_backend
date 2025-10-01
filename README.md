@@ -56,3 +56,23 @@ This document outlines the API endpoints that the CinemaAI frontend application 
   - **Content:** An array of recommended movie objects, with the same structure as in the `/movies` endpoint response.
 - **Error Response:**
   - **Code:** 422 Unprocessable Entity (if request body is invalid)
+
+### 4. Check Model Loading Status
+
+- **Endpoint:** `GET /models/status`
+- **Description:** Returns the loading status of the recommendation models. This is useful for deployment health checks to confirm if the application is ready to serve recommendation requests after starting up. The models are loaded in the background to ensure a quick startup time.
+- **Success Response:**
+  - **Code:** 200 OK
+  - **Content:** A JSON object indicating whether the models are loaded.
+  - **Example (Models Loaded):**
+    ```json
+    {
+      "models_loaded": true
+    }
+    ```
+  - **Example (Models Still Loading):**
+    ```json
+    {
+      "models_loaded": false
+    }
+    ```
