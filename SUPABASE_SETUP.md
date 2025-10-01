@@ -213,7 +213,7 @@ uvicorn main:app --reload
 ```bash
 curl -X POST "http://localhost:8000/auth/signup" \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "password": "securepassword123", "full_name": "Test User"}'
+  -d '{"email": "test@example.com", "password": "your-secure-password", "full_name": "Test User"}'
 ```
 
 **Login:**
