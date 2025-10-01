@@ -2,6 +2,7 @@
 
 import logging
 import numpy as np
+import pandas as pd
 import joblib
 import os
 import requests
@@ -14,17 +15,43 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 from fastapi import HTTPException
-{{ ... }}
-    collab_model = joblib.load(collab_model_path) if os.path.exists(collab_model_path) else None
-    user_movie_matrix = pd.read_pickle(user_movie_matrix_path) if os.path.exists(user_movie_matrix_path) else None
 
-except Exception as e:
-    logging.error(f"Error loading models: {e}")
+# Import configuration and Supabase client
+import config
+from supabase_client import get_supabase_client
+
 # --- Global Variables ---
 movies_df = pd.DataFrame()
 content_matrix = None
 collab_model = None
 user_movie_matrix = None
+
+# --- Model & Data Loading ---
+try:
+    logging.info("Loading pre-trained models and data...")
+    
+    # Define paths to model assets
+    assets_path = config.ASSETS_PATH
+    movies_df_path = os.path.join(assets_path, "movies_df.pkl")
+    content_matrix_path = os.path.join(assets_path, "content_matrix.joblib")
+    collab_model_path = os.path.join(assets_path, "collab_model.joblib")
+    user_movie_matrix_path = os.path.join(assets_path, "user_movie_matrix.pkl")
+
+    # Load data from files if they exist
+    if os.path.exists(movies_df_path):
+        movies_df = pd.read_pickle(movies_df_path)
+    if os.path.exists(content_matrix_path):
+        content_matrix = joblib.load(content_matrix_path)
+    if os.path.exists(collab_model_path):
+        collab_model = joblib.load(collab_model_path)
+    if os.path.exists(user_movie_matrix_path):
+        user_movie_matrix = pd.read_pickle(user_movie_matrix_path)
+
+    logging.info("Successfully loaded models and data.")
+
+except Exception as e:
+    logging.error(f"Error loading models: {e}")
+
 
 # --- Retraining State ---
 retrain_lock = threading.Lock()
@@ -37,7 +64,6 @@ new_movie_count = 0
 # --- Core Logic Functions ---
 
 def get_recommendations(selected_movie_ids: list[str], num_recs: int = 10) -> list[dict]:
-{{ ... }}
     """Generates hybrid recommendations using pre-loaded models."""
     if content_matrix is None or movies_df.empty:
         raise HTTPException(status_code=503, detail="Recommendation models are not ready.")
@@ -193,7 +219,7 @@ def _retrain_models() -> Dict[str, Any]:
         
         # 1. Fetch all movies from Supabase
         supabase = get_supabase_client()
-        response = supabase.table(config.MODELS_TABLE).select("*").execute()
+        response = supabase.table(config.MOVIES_TABLE).select("*").execute()
         
         if not response.data:
             logging.warning("No movies found in the database for retraining")

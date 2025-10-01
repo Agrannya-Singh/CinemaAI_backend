@@ -37,7 +37,6 @@ API_TIMEOUT_SECONDS = 10
 MOVIES_TABLE = "movies"
 USERS_TABLE = "users"
 USER_RATINGS_TABLE = "user_ratings"
-MODELS_TABLE = "movies"  # Using movies table for model training
 
 # --- Supabase Storage Configuration ---
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "trained_models")  # Your Supabase Storage bucket name
