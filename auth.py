@@ -136,6 +136,12 @@ async def sign_up_user(user_data: UserSignUp) -> dict:
             }
         }
     except Exception as e:
+        logging.exception("Sign up error")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create user"
+        )
+    except Exception as e:
         logging.error(f"Sign up error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
