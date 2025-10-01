@@ -1,7 +1,9 @@
 import os
 import logging
+import requests
+from typing import Optional
 from supabase import create_client
-from config import SUPABASE_URL, SUPABASE_ANON_KEY, STORAGE_BUCKET
+import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -9,30 +11,14 @@ logger = logging.getLogger(__name__)
 
 class SupabaseStorage:
     def __init__(self):
-        """Initialize Supabase client for storage operations."""
-        self.supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        self.bucket = STORAGE_BUCKET
-        self._ensure_bucket_exists()
-
-    def _ensure_bucket_exists(self):
-        """Ensure the storage bucket exists."""
-        try:
-            self.supabase.storage.get_bucket(self.bucket)
-        except Exception as e:
-            if "Bucket not found" in str(e):
-                logger.info(f"Creating bucket: {self.bucket}")
-                self.supabase.storage.create_bucket(
-                    self.bucket,
-                    public=True,  # Set to False for private buckets
-                    file_size_limit=100  # MB
-                )
-            else:
-                logger.error(f"Error checking bucket: {e}")
-                raise
+        """Initialize Supabase storage client."""
+        self.supabase = create_client(config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
+        self.bucket = config.STORAGE_BUCKET
+        self.public_url = f"{config.SUPABASE_URL}/storage/v1/object/public/{self.bucket}"
 
     def upload_file(self, file_path: str, object_name: str = None) -> bool:
         """
-        Upload a file to Supabase Storage.
+        Upload a file to the public bucket.
         
         Args:
             file_path: Path to the local file
@@ -43,71 +29,70 @@ class SupabaseStorage:
         """
         try:
             if not os.path.exists(file_path):
-                logger.error(f"File not found: {file_path}")
-                return False
-                
+                raise FileNotFoundError(f"File not found: {file_path}")
+
             if object_name is None:
                 object_name = os.path.basename(file_path)
-            
+
             with open(file_path, 'rb') as f:
                 file_data = f.read()
             
-            self.supabase.storage.\
-                from_(self.bucket).\
-                upload(object_name, file_data)
+            # Upload with overwrite if exists
+            response = self.supabase.storage. \
+                from_(self.bucket). \
+                upload(object_name, file_data, {'x-upsert': 'true'})
             
-            logger.info(f"Uploaded {file_path} to {self.bucket}/{object_name}")
+            if response.get('error'):
+                raise Exception(response['error']['message'])
+            
+            logger.info(f"Uploaded {object_name} to {self.bucket}")
             return True
             
         except Exception as e:
-            logger.error(f"Error uploading {file_path}: {e}")
+            logger.error(f"Upload error: {e}")
             return False
 
-    def download_file(self, object_name: str, file_path: str) -> bool:
+    def download_file(self, object_name: str, local_path: str) -> bool:
         """
-        Download a file from Supabase Storage.
+        Download a file from the public bucket.
         
         Args:
             object_name: Name of the file in storage
-            file_path: Local path to save the file
+            local_path: Local path to save the file
             
         Returns:
             bool: True if download was successful
         """
         try:
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
             
-            response = self.supabase.storage.\
-                from_(self.bucket).\
-                download(object_name)
+            # Direct download from public URL
+            url = f"{self.public_url}/{object_name}"
+            response = requests.get(url)
+            response.raise_for_status()
             
-            with open(file_path, 'wb') as f:
-                f.write(response)
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
             
-            logger.info(f"Downloaded {object_name} to {file_path}")
+            logger.info(f"Downloaded {object_name} to {local_path}")
             return True
             
         except Exception as e:
-            logger.error(f"Error downloading {object_name}: {e}")
+            logger.error(f"Download error: {e}")
             return False
 
     def get_public_url(self, object_name: str) -> str:
         """
-        Get a public URL for a file in storage.
+        Get the public URL for a file in the bucket.
         
         Args:
             object_name: Name of the file in storage
             
         Returns:
-            str: Public URL or empty string if error
+            str: Public URL of the file
         """
-        try:
-            return self.supabase.storage.\
-                from_(self.bucket).\
-                get_public_url(object_name)
-        except Exception as e:
-            logger.error(f"Error getting URL for {object_name}: {e}")
-            return ""
+        return f"{self.public_url}/{object_name}"
 
-# Singleton instance
+# Singleton instance for easy importing
 storage = SupabaseStorage()
