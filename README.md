@@ -211,7 +211,7 @@ Implementation uses TF-IDF vectorization with cosine similarity:
 
 ### Scaling
 - SQLite suitable for development and small deployments
-- Consider PostgreSQL for production environments
+-  PostgreSQL for production environments(supabase)
 - Implement connection pooling for concurrent requests
 
 ### Security
