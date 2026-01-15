@@ -1,18 +1,21 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Core - Pinned to stable 2024 versions
+# Core Application
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 
-# The Critical Fix: Aligning the timeline
-# We downgrade Scikit-learn to a version that accepts Numpy 1.x
-numpy<2.0.0
-scikit-learn==1.3.2
-pandas==2.0.3
+# The "Modern Era" Stack (Numpy 2.0 Compatible)
+numpy>=2.0.0
+pandas>=2.2.2
+scikit-learn>=1.5.0
 
-# ML Stack - Compatible with the above
-sentence-transformers==2.6.0
-torch==2.2.1
+# ML Stack (Must be recent to handle Numpy 2.0)
+# We upgrade Sentence Transformers to 3.x to ensure it works with the new stack
+sentence-transformers>=3.0.0
+
+# PyTorch 2.4+ adds support for Numpy 2.0
+# We explicitly request the CPU version to avoid the 2GB download
+torch==2.5.1
 
 # Utilities
 python-dotenv==1.0.1
