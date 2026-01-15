@@ -268,6 +268,8 @@ curl -X POST http://localhost:8000/recommend \
 # Search movie
 curl http://localhost:8000/search/Matrix
 ```
+## Metrics :
+<img width="1667" height="320" alt="image" src="https://github.com/user-attachments/assets/30b551b8-483f-4a2e-9d84-f2ef4d607ceb" />
 
 ## License
 
