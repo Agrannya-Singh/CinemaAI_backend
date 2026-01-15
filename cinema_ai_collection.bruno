@@ -1,0 +1,73 @@
+{
+    "name": "CinemaAI Backend",
+    "version": "1",
+    "items": [
+        {
+            "type": "http",
+            "name": "Health Check",
+            "seq": 1,
+            "request": {
+                "url": "https://cinemaai-backend.onrender.com/",
+                "method": "GET",
+                "headers": [],
+                "body": {
+                    "mode": "none",
+                    "formUrlEncoded": [],
+                    "multipartForm": []
+                }
+            }
+        },
+        {
+            "type": "http",
+            "name": "Get All Movies",
+            "seq": 2,
+            "request": {
+                "url": "https://cinemaai-backend.onrender.com/movies",
+                "method": "GET",
+                "headers": [],
+                "body": {
+                    "mode": "none",
+                    "formUrlEncoded": [],
+                    "multipartForm": []
+                }
+            }
+        },
+        {
+            "type": "http",
+            "name": "Get Recommendations",
+            "seq": 3,
+            "request": {
+                "url": "https://cinemaai-backend.onrender.com/recommend",
+                "method": "POST",
+                "headers": [
+                    {
+                        "name": "Content-Type",
+                        "value": "application/json",
+                        "enabled": true
+                    }
+                ],
+                "body": {
+                    "mode": "json",
+                    "json": "{\n  \"movie_ids\": [\"tt1375666\"],\n  \"num_recommendations\": 5\n}",
+                    "formUrlEncoded": [],
+                    "multipartForm": []
+                }
+            }
+        },
+        {
+            "type": "http",
+            "name": "Search Movie",
+            "seq": 4,
+            "request": {
+                "url": "https://cinemaai-backend.onrender.com/search/Matrix",
+                "method": "GET",
+                "headers": [],
+                "body": {
+                    "mode": "none",
+                    "formUrlEncoded": [],
+                    "multipartForm": []
+                }
+            }
+        }
+    ]
+}

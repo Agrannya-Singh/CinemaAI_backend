@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS movies (
 
 ## API Contract
 
-Base URL: http://localhost:8000
+Base URL: https://cinemaai-backend.onrender.com
 
 ### GET /movies
 
@@ -194,13 +194,16 @@ System initializes with following movie entries:
 
 ## Recommendation Algorithm
 
-Implementation uses TF-IDF vectorization with cosine similarity:
+## Recommendation Algorithm
 
-1. Text preprocessing of movie metadata (genres, cast, overview)
-2. TF-IDF vectorization of combined text features
-3. Cosine similarity matrix computation
-4. K-nearest neighbors selection based on similarity scores
-5. Results filtered by similarity threshold (>0.1)
+Implementation uses **Sentence Transformers** for robust semantic similarity:
+
+1.  **Semantic Embedding**: Uses the `all-MiniLM-L6-v2` Sentence Transformer model to generate dense vector embeddings for movie metadata (combined features: overview, genres, cast).
+2.  **Context Awareness**: Unlike TF-IDF, this model captures deep semantic meaning and context (e.g., understanding that "scary" is semantically similar to "horror").
+3.  **Cosine Similarity**: Calculates the cosine similarity matrix between these dense embeddings.
+4.  **Nearest Neighbors**: Selects the closest matches based on semantic distance.
+
+*Note: The system also includes a backup collaborative filtering model using Nearest Neighbors on user ratings, if sufficient data exists.*
 
 ## Operational Considerations
 

@@ -37,7 +37,7 @@ def train_and_save_models():
         logging.error("No movies found. Please populate the database first.")
         return
 
-    # --- 1. Robust Content-Based Model (The "Transformer" Part) ---
+    # --- 1. Robust Content-Based Model (The "Transformer" Model) ---
     logging.info(f"Loading Transformer model: {TRANSFORMER_MODEL_NAME}...")
     model = SentenceTransformer(TRANSFORMER_MODEL_NAME)
 
