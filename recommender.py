@@ -10,6 +10,7 @@ import sqlite3
 from scipy.sparse import load_npz
 from sklearn.preprocessing import MinMaxScaler
 from fastapi import HTTPException
+import time
 
 # Import settings f config file
 import config
@@ -37,6 +38,7 @@ except FileNotFoundError:
 
 def get_recommendations(selected_movie_ids: list[str], num_recs: int = 10) -> list[dict]:
     """Generates hybrid recommendations using pre-loaded models."""
+    start_time = time.time()
     if content_matrix is None or movies_df.empty:
         raise HTTPException(status_code=503, detail="Recommendation models are not ready.")
     if not all(mid in movies_df.index for mid in selected_movie_ids):
@@ -56,7 +58,12 @@ def get_recommendations(selected_movie_ids: list[str], num_recs: int = 10) -> li
     recs_df = recs_df[~recs_df['id'].isin(selected_movie_ids)]
     recs_df = recs_df.sort_values('score', ascending=False).head(num_recs)
 
-    return movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
+    results = movies_df.loc[recs_df['id'].tolist()].reset_index().to_dict(orient="records")
+    
+    elapsed_time = time.time() - start_time
+    logging.info(f"Recommendation generation took {elapsed_time:.4f} seconds for input: {selected_movie_ids}")
+    
+    return results
 
 def get_all_movies() -> list[dict]:
     """Returns the list of all movies from the pre-loaded dataframe."""
