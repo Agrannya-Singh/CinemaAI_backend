@@ -1,12 +1,19 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
+# Core - Pinned to stable 2024 versions
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
-# Force Numpy 1.x for compatibility with older Torch
+
+# The Critical Fix: Aligning the timeline
+# We downgrade Scikit-learn to a version that accepts Numpy 1.x
 numpy<2.0.0
-scikit-learn==1.7.2
-pandas==2.2.2
+scikit-learn==1.3.2
+pandas==2.0.3
+
+# ML Stack - Compatible with the above
 sentence-transformers==2.6.0
 torch==2.2.1
+
+# Utilities
 python-dotenv==1.0.1
 requests==2.31.0
