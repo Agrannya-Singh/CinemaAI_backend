@@ -8,11 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
-# Import the logic functions from your new recommender.py file
-import recommender
 
 # --- Configuration & Logging ---
+# Configure logging BEFORE importing modules that might log at import time
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Import the logic functions from your new recommender.py file
+import recommender
 
 # --- FastAPI Application ---
 app = FastAPI(title="CinemaAI Recommendation API", description="A hybrid movie recommendation engine.")
