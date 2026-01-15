@@ -8,6 +8,9 @@ uvicorn[standard]==0.29.0
 # Let scikit-learn determine the correct numpy and pandas versions
 scikit-learn==1.7.2
 pandas==2.2.2
+#ML Stack (V2.0)
+sentence-transformers==2.6.0
+torch==2.2.1
 
 # Utilities
 python-dotenv==1.0.1
