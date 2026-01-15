@@ -1,8 +1,7 @@
 
 # CinemaAI Backend
 
-check repo discription for the hosted links. all of my projects are deployed (one version or another. I will soon move all my projects to a clean IAAS platform, so deal with the winding down issue. 
-
+check repo discription for the hosted links.$$
 Movie recommendation system backend implementation using FastAPI framework with machine learning-based recommendation engine.
 
 ## Overview
