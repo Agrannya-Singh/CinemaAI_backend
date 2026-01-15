@@ -1,1 +1,1 @@
-add the trained models here you fucking retard
+trained models via scikit learn are added here
